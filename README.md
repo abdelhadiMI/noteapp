@@ -1,2 +1,2 @@
 # noteapp
-noteapp repo for iddriss and hadi
+noteapp repo for idris and hadi
