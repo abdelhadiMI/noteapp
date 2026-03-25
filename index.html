@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Random Interface Generator</title>
+  <style>
+    :root{
+      --bg:#0f1724; --fg:#e6eef8; --accent:#7c3aed; --card:#152033;
+      --radius:10px; --gap:16px; --font-family:system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-family)}
+    .app{display:flex;height:100vh;padding:24px;gap:24px}
+    .controls{width:320px;background:linear-gradient(180deg,rgba(255,255,255,0.03),transparent);padding:16px;border-radius:12px}
+    .controls h2{margin:0 0 12px 0;font-size:16px}
+    .controls label{display:block;margin:10px 0 6px;font-size:13px;opacity:.9}
+    .controls input[type="text"], .controls select{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--fg)}
+    .controls input[type="range"]{width:100%}
+    .controls .row{display:flex;gap:8px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:8px;border:0;background:var(--accent);color:white;cursor:pointer}
+    .preview{flex:1;overflow:auto;padding:20px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);min-width:0}
+    .ui{padding:20px;background:var(--card);border-radius:var(--radius);display:flex;flex-direction:column;gap:var(--gap);align-items:flex-start}
+    .ui.header{font-size:20px;font-weight:700}
+    .ui p{margin:0;opacity:.9}
+    .controls .small{font-size:12px;opacity:.8}
+    .cards{display:flex;gap:12px;flex-wrap:wrap}
+    .card{background:rgba(255,255,255,0.03);padding:12px;border-radius:10px;min-width:160px}
+    .buttons{display:flex;gap:8px;flex-wrap:wrap}
+    .kbd{padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.03);font-size:12px}
+    footer{opacity:.7;font-size:12px;margin-top:8px}
+    /* responsive */
+    @media (max-width:800px){.app{flex-direction:column}.controls{width:100%}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="controls" aria-label="controls">
+      <h2>Random Interface</h2>
+      <label>Seed (optional)</label>
+      <input id="seed" type="text" placeholder="leave empty for random" />
+      <label>Elements count: <span id="countLabel">6</span></label>
+      <input id="count" type="range" min="1" max="12" value="6" />
+      <label>Layout</label>
+      <select id="layout">
+        <option value="column">Column</option>
+        <option value="row">Row</option>
+        <option value="grid">Grid</option>
+      </select>
+      <label>Font</label>
+      <select id="font">
+        <option value="system">System</option>
+        <option value="serif">Serif</option>
+        <option value="mono">Monospace</option>
+        <option value="display">Display</option>
+      </select>
+      <label class="small">Theme accent color</label>
+      <div class="row" style="align-items:center">
+        <input id="accent" type="color" value="#7c3aed" />
+        <button id="generate" class="btn" style="flex:1">Generate</button>
+      </div>
+      <div style="margin-top:12px" class="row">
+        <button id="randomize" class="btn" style="flex:1;background:#334155">Randomize</button>
+        <button id="export" class="btn" style="flex:1;background:#0ea5a0">Export HTML</button>
+      </div>
+      <footer>Use Generate to apply seed. Randomize picks a new seed.</footer>
+    </aside>
+
+    <main class="preview" id="preview" aria-live="polite">
+      <!-- generated interface goes here -->
+    </main>
+  </div>
+
+  <script>
+    // Simple seedable RNG (mulberry32)
+    function seedFromString(s){
+      let h=2166136261>>>0;
+      for(let i=0;i<s.length;i++){h=Math.imul(h^s.charCodeAt(i),16777619)>>>0}
+      return h;
+    }
+    function mulberry32(a){return function(){a+=0x6D2B79F5;a=Math.imul(a^a>>>15,a|1);a^=a+Math.imul(a^a>>>7,a|61);return ((a^a>>>14)>>>0)/4294967296}}
+    function rand(seed){ return mulberry32(seedFromString(String(seed))) }
+
+    const preview = document.getElementById('preview')
+    const seedInput = document.getElementById('seed')
+    const countInput = document.getElementById('count')
+    const countLabel = document.getElementById('countLabel')
+    const layoutSelect = document.getElementById('layout')
+    const fontSelect = document.getElementById('font')
+    const accentInput = document.getElementById('accent')
+    const generateBtn = document.getElementById('generate')
+    const randomizeBtn = document.getElementById('randomize')
+    const exportBtn = document.getElementById('export')
+
+    countInput.addEventListener('input',()=>countLabel.textContent = countInput.value)
+    generateBtn.addEventListener('click', ()=> apply(seedInput.value || Math.random().toString()))
+    randomizeBtn.addEventListener('click', ()=>{
+      const s = Math.random().toString(36).slice(2,10)
+      seedInput.value = s
+      apply(s)
+    })
+    exportBtn.addEventListener('click', ()=> {
+      const html = preview.innerHTML
+      const blob = new Blob([`<!-- exported UI -->\n<div>${html}</div>`], {type:'text/html'})
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = 'random-ui.html'; a.click(); URL.revokeObjectURL(url)
+    })
+
+    function pick(rng, arr){ return arr[Math.floor(rng()*arr.length)] }
+    function randColor(rng){ // pastel-ish
+      const h = Math.floor(rng()*360), s = 60 + Math.floor(rng()*20), l = 45 + Math.floor(rng()*10)
+      return `hsl(${h} ${s}% ${l}%)`
+    }
+
+    function apply(seed){
+      const rng = rand(seed)
+      const count = Number(countInput.value)
+      const layout = layoutSelect.value
+      const fontChoice = fontSelect.value
+      const accent = accentInput.value
+
+      // apply root vars
+      document.documentElement.style.setProperty('--accent', accent)
+      const fonts = {
+        system: 'system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial',
+        serif: 'Georgia, "Times New Roman", Times, serif',
+        mono: 'ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace',
+        display: '"Inter", "Poppins", system-ui, sans-serif'
+      }
+      document.documentElement.style.setProperty('--font-family', fonts[fontChoice] || fonts.system)
+
+      // build UI
+      preview.innerHTML = ''
+      const wrapper = document.createElement('div')
+      wrapper.className = 'ui'
+      wrapper.style.flexDirection = layout === 'row' ? 'row' : (layout === 'grid' ? 'column' : 'column')
+      wrapper.style.gap = 'var(--gap)'
+
+      // header
+      const h = document.createElement('div')
+      h.className = 'header'
+      const titles = ['Notes', 'Dashboard', 'Studio', 'Workspace', 'Archive', 'Inbox', 'Explorer']
+      h.textContent = `${pick(rng, titles)} • ${String(seed).slice(0,8)}`
+      wrapper.appendChild(h)
+
+      // description
+      const p = document.createElement('p')
+      p.textContent = pick(rng, [
+        'Quick access to your recent items.',
+        'A lightweight mock interface.',
+        'Randomized components for inspiration.',
+        'Prototype layout generated from a seed.'
+      ])
+      wrapper.appendChild(p)
+
+      // cards / elements
+      const cards = document.createElement('div')
+      cards.className = 'cards'
+      cards.style.display = layout === 'grid' ? 'grid' : 'flex'
+      if(layout === 'grid'){ cards.style.gridTemplateColumns = 'repeat(auto-fill,minmax(180px,1fr))'; cards.style.gap='12px' }
+      for(let i=0;i<count;i++){
+        const card = document.createElement('div')
+        card.className = 'card'
+        card.style.background = `linear-gradient(180deg, ${randColor(rng)} 0%, rgba(255,255,255,0.02) 100%)`
+        const title = document.createElement('div')
+        title.style.fontWeight = 700
+        title.textContent = pick(rng, ['Task', 'Note', 'Item', 'Card', 'Entry', 'File']) + ' ' + (i+1)
+        const body = document.createElement('div')
+        body.style.marginTop = '8px'
+        body.style.opacity = '.95'
+        body.textContent = pick(rng, [
+          'Short description goes here.',
+          'Tap to open and edit.',
+          'Auto-generated content sample.',
+          'Use it as a placeholder.'
+        ])
+        const actionRow = document.createElement('div')
+        actionRow.className = 'buttons'
+        actionRow.style.marginTop = '12px'
+        const btnCount = 1 + Math.floor(rng()*3)
+        for(let b=0;b<btnCount;b++){
+          const btn = document.createElement('button')
+          btn.className = 'kbd'
+          btn.textContent = pick(rng, ['Open','Edit','Share','More','Delete','Pin'])
+          btn.style.border = 'none'
+          btn.style.background = `rgba(255,255,255,0.06)`
+          actionRow.appendChild(btn)
+        }
+        card.appendChild(title); card.appendChild(body); card.appendChild(actionRow)
+        cards.appendChild(card)
+      }
+      wrapper.appendChild(cards)
+
+      // footer
+      const foot = document.createElement('footer')
+      foot.textContent = `Seed: ${seed} • layout: ${layout} • elements: ${count}`
+      wrapper.appendChild(foot)
+
+      preview.appendChild(wrapper)
+    }
+
+    // initial
+    (()=>{
+      seedInput.value = Math.random().toString(36).slice(2,8)
+      apply(seedInput.value)
+    })()
+  </script>
+</body>
+</html>
